@@ -2,8 +2,11 @@
 using StackExchange.Redis;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Web;
 
 namespace Redis
@@ -11,20 +14,23 @@ namespace Redis
     public class RedisHelper
     {
         public static IDatabase conn = null;
-        public static void RedisConnectionAndUpload(string connectionString)
+        public static Dictionary<string,string> RedisConnectionAndUpload(string connectionString)
         {
-            var muxer = ConnectionMultiplexer.Connect(configuration: connectionString);
+            var dict = new Dictionary<string, string>()
+            ConnectionMultiplexer muxer = ConnectionMultiplexer.Connect(configuration: connectionString);
             
-                conn = muxer.GetDatabase();
+            conn = muxer.GetDatabase();
             muxer.Wait(conn.PingAsync());
 
             List<City> citys = CityDataSource.CityDataSource.GetCitys();
 
-            if (conn.StringGet("IsValue").IsNull)
+            if (conn.StringGet(key: "IsValue").IsNull)
             {
+                var oneByone = new Stopwatch();
+                oneByone.Start();
                 int i = 0;
 
-                citys.Take(1000).ToList().ForEach(c =>
+                citys.ToList().ForEach(c =>
                 {
                     i++;
                     conn.HashSetAsync("Citys:Data:" + c.Id.ToString(), c.ToHashEntries());
@@ -43,8 +49,21 @@ namespace Redis
                         conn.SortedSetAdd("Citys:index:" + p, c.Id, 0);
                     }
                 });
+                oneByone.Stop();
+                dict.Add(key: "OneByOne Elapsed Milliseconds: ", value: oneByone.ElapsedMilliseconds.ToString());
+                dict.Add(key: "OneByOne Elapsed Seconds: ", value: (oneByone.ElapsedMilliseconds/1000).ToString());
+
+                var whole = new Stopwatch();
+                whole.Start();
+                conn.StringSet(key: "cityslist", value: Serialize(citys));
+                whole.Stop();
+                dict.Add(key: "Whole Elapsed Milliseconds: ", value: whole.ElapsedMilliseconds.ToString());
+                dict.Add(key: "whole Elapsed Seconds: ", value: (whole.ElapsedMilliseconds / 1000).ToString());
+
                 conn.StringSet(key: "IsValue", value: true);
             }
+            return dict;
+
         }
 
         public static List<City> GetCityByCode(string name)
@@ -86,7 +105,15 @@ namespace Redis
 
             return hs;
         }
-    }
 
-   
+        public static byte[] Serialize(List<City> city)
+        {
+            var bfr = new BinaryFormatter();
+            using (MemoryStream ms = new MemoryStream())
+            {
+                bfr.Serialize(ms, city);
+                return ms.ToArray();
+            }
+        }
+    }   
 }

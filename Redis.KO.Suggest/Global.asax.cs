@@ -13,7 +13,11 @@ namespace Redis.KO.Suggest
         {
             AreaRegistration.RegisterAllAreas();
             RouteConfig.RegisterRoutes(RouteTable.Routes);
-            RedisHelper.RedisConnectionAndUpload(connectionString: "AZSA-D00-RECA02.onev.azure.com");
+            Dictionary<string,string> dict = RedisHelper.RedisConnectionAndUpload(connectionString: "127.0.0.1:6379");
+            foreach (var d in dict)
+            {
+                Response.AddHeader(d.Key, d.Value);
+            }
         }
     }
 }
